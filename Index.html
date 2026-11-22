@@ -1,0 +1,116 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#17152b">
+<title>StudyBuddy</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;padding:20px;background:#17152b;color:#fff;font-family:Arial,sans-serif}
+header{text-align:center;padding:20px}
+h1{font-size:34px;margin:5px;color:#bda5ff}
+p{color:#c9c5d9;line-height:1.5}
+.card{background:#28243f;padding:18px;border-radius:16px;margin:16px 0}
+h2{font-size:20px;margin-top:0;color:#d4c4ff}
+button,.link{display:block;width:100%;padding:14px;margin:10px 0;border:0;border-radius:10px;background:#9270e8;color:white;font-size:16px;font-weight:bold;text-align:center;text-decoration:none}
+input,textarea,select{width:100%;padding:13px;margin:7px 0 14px;border:1px solid #625783;border-radius:9px;background:#17152b;color:white;font-size:16px}
+textarea{min-height:90px}
+.task{padding:10px;border-bottom:1px solid #51496a}
+.small{font-size:13px;color:#aaa3bd}
+</style>
+</head>
+<body>
+<header>
+<h1>📚 StudyBuddy</h1>
+<p>Your friendly homework and revision assistant</p>
+</header>
+
+<div class="card">
+<h2>🌐 Open Educake</h2>
+<p>Go to your Educake account to view your schoolwork.</p>
+<a class="link" href="https://www.educake.co.uk/" target="_blank">Open Educake</a>
+</div>
+
+<div class="card">
+<h2>📸 Question helper</h2>
+<p>Choose a screenshot of a question, or type it below. You can then attach the screenshot to ChatGPT yourself.</p>
+<input type="file" id="photo" accept="image/*">
+<label for="subject">Subject</label>
+<select id="subject">
+<option>Science</option><option>Maths</option><option>English</option>
+<option>History</option><option>Geography</option><option>Other</option>
+</select>
+<label for="question">Type your question (optional)</label>
+<textarea id="question" placeholder="Write or paste your question here..."></textarea>
+<label for="level">School year</label>
+<select id="level">
+<option>Year 7</option><option>Year 8</option><option>Year 9</option>
+<option>Year 10</option><option>Year 11</option><option>Other</option>
+</select>
+<button onclick="makePrompt()">✨ Create study prompt</button>
+<textarea id="result" placeholder="Your study prompt will appear here..." readonly></textarea>
+<button onclick="copyPrompt()">Copy prompt</button>
+<button onclick="window.open('https://chatgpt.com','_blank')">Open ChatGPT</button>
+<p class="small">Your selected screenshot stays on your device. Attach it to ChatGPT yourself if you want help with the image.</p>
+</div>
+
+<div class="card">
+<h2>📝 Homework planner</h2>
+<input id="task" placeholder="What homework do you need to do?">
+<input id="due" type="date">
+<button onclick="addTask()">Add homework</button>
+<div id="tasks"></div>
+</div>
+
+<script>
+function makePrompt(){
+ const subject=document.getElementById('subject').value;
+ const level=document.getElementById('level').value;
+ const question=document.getElementById('question').value;
+ const photo=document.getElementById('photo').files[0];
+ let prompt="I am in "+level+". Help me understand this "+subject+" question. Explain it step by step in simple language. Help me learn how to work it out rather than just giving me an answer.";
+ if(question) prompt+=" My question is: "+question;
+ if(photo) prompt+=" I have also selected a screenshot. I will attach it separately in ChatGPT.";
+ document.getElementById('result').value=prompt;
+}
+function copyPrompt(){
+ const box=document.getElementById('result');
+ box.select();
+ if(navigator.clipboard && window.isSecureContext){
+ navigator.clipboard.writeText(box.value).then(()=>alert('Prompt copied!'));
+ }else{
+ document.execCommand('copy');
+ alert('Prompt copied!');
+ }
+}
+function getTasks(){
+ return JSON.parse(localStorage.getItem('studybuddyTasks')||'[]');
+}
+function showTasks(){
+ const tasks=getTasks();
+ document.getElementById('tasks').innerHTML=tasks.map((t,i)=>
+ '<div class="task">'+t.name+' <span class="small">'+(t.date||'')+'</span> <button onclick="removeTask('+i+')">Done ✓</button></div>'
+ ).join('');
+}
+function addTask(){
+ const name=document.getElementById('task').value.trim();
+ const date=document.getElementById('due').value;
+ if(!name){alert('Please enter your homework first.');return;}
+ const tasks=getTasks();
+ tasks.push({name,date});
+ localStorage.setItem('studybuddyTasks',JSON.stringify(tasks));
+ document.getElementById('task').value='';
+ showTasks();
+}
+function removeTask(i){
+ const tasks=getTasks();
+ tasks.splice(i,1);
+ localStorage.setItem('studybuddyTasks',JSON.stringify(tasks));
+ showTasks();
+}
+showTasks();
+</script>
+</body>
+</html>
