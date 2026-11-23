@@ -3,13 +3,16 @@ package com.studybuddy.app;
 import android.app.Activity;
 import android.content.Intent;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.view.Gravity;
+import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -22,6 +25,7 @@ import com.google.mlkit.vision.text.TextRecognizer;
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions;
 
 import java.io.IOException;
+import java.io.InputStream;
 
 public class MainActivity extends Activity {
     private static final int OVERLAY_PERMISSION_REQUEST = 4101;
@@ -30,8 +34,10 @@ public class MainActivity extends Activity {
     private LinearLayout root;
     private TextView status;
     private TextView extractedText;
+    private ImageView screenshotPreview;
     private Button chooseScreenshot;
     private TextRecognizer recognizer;
+    private Bitmap selectedScreenshot;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -65,7 +71,7 @@ public class MainActivity extends Activity {
         addTopSpace(subtitle, 10);
 
         TextView instructions = new TextView(this);
-        instructions.setText("HOW TO SCAN A QUESTION\n1. Take a screenshot of your Educake question.\n2. Tap the floating SB bubble.\n3. Choose the screenshot below.\n\nStudyBuddy will read the text on your device. Nothing is captured until you choose an image.");
+        instructions.setText("HOW TO SCAN A QUESTION\n1. Take a screenshot of your Educake question.\n2. Tap the floating SB bubble.\n3. Choose the screenshot below.\n\nStudyBuddy reads the text on your device and keeps the original image so diagrams can be considered too. Nothing is captured until you choose an image.");
         instructions.setTextColor(0xFFE8E2F0);
         instructions.setTextSize(15);
         instructions.setPadding(18, 18, 18, 18);
@@ -83,12 +89,27 @@ public class MainActivity extends Activity {
         status.setTextSize(14);
         addTopSpace(status, 14);
 
+        TextView imageHeading = new TextView(this);
+        imageHeading.setText("QUESTION IMAGE (INCLUDING DIAGRAMS)");
+        imageHeading.setTextColor(Color.WHITE);
+        imageHeading.setTextSize(14);
+        imageHeading.setTypeface(null, android.graphics.Typeface.BOLD);
+        addTopSpace(imageHeading, 24);
+
+        screenshotPreview = new ImageView(this);
+        screenshotPreview.setAdjustViewBounds(true);
+        screenshotPreview.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        screenshotPreview.setMaxHeight(dp(320));
+        screenshotPreview.setVisibility(View.GONE);
+        screenshotPreview.setBackgroundColor(0xFF211B2B);
+        addTopSpace(screenshotPreview, 10);
+
         TextView resultHeading = new TextView(this);
         resultHeading.setText("RECOGNISED QUESTION TEXT");
-        resultHeading.setTextColor(0xFFFFFFFF);
+        resultHeading.setTextColor(Color.WHITE);
         resultHeading.setTextSize(14);
         resultHeading.setTypeface(null, android.graphics.Typeface.BOLD);
-        addTopSpace(resultHeading, 26);
+        addTopSpace(resultHeading, 24);
 
         extractedText = new TextView(this);
         extractedText.setText("Your recognised text will appear here.");
@@ -114,7 +135,7 @@ public class MainActivity extends Activity {
         setContentView(scroll);
     }
 
-    private void addTopSpace(android.view.View view, int top) {
+    private void addTopSpace(View view, int top) {
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
         params.topMargin = dp(top);
         root.addView(view, params);
@@ -147,15 +168,25 @@ public class MainActivity extends Activity {
     }
 
     private void readScreenshot(Uri imageUri) {
-        status.setText("Reading screenshot on this device…");
+        status.setText("Opening screenshot on this device…");
         chooseScreenshot.setEnabled(false);
-        try {
-            Bitmap bitmap = android.provider.MediaStore.Images.Media.getBitmap(getContentResolver(), imageUri);
-            InputImage image = InputImage.fromBitmap(bitmap, 0);
+        try (InputStream stream = getContentResolver().openInputStream(imageUri)) {
+            if (stream == null) throw new IOException("Image stream unavailable");
+            Bitmap bitmap = BitmapFactory.decodeStream(stream);
+            if (bitmap == null) throw new IOException("Image could not be decoded");
+            if (selectedScreenshot != null && !selectedScreenshot.isRecycled()) {
+                selectedScreenshot.recycle();
+            }
+            selectedScreenshot = bitmap;
+            screenshotPreview.setImageBitmap(selectedScreenshot);
+            screenshotPreview.setVisibility(View.VISIBLE);
+
+            status.setText("Image loaded. Reading question text…");
+            InputImage image = InputImage.fromBitmap(selectedScreenshot, 0);
             recognizer.process(image)
                 .addOnSuccessListener(result -> showRecognisedText(result))
                 .addOnFailureListener(error -> {
-                    status.setText("Couldn't read that image. Try a clearer screenshot.");
+                    status.setText("Image loaded, but text recognition failed. The diagram image is still available above.");
                     Toast.makeText(this, "Text recognition failed.", Toast.LENGTH_LONG).show();
                 })
                 .addOnCompleteListener(task -> chooseScreenshot.setEnabled(true));
@@ -168,10 +199,10 @@ public class MainActivity extends Activity {
     private void showRecognisedText(Text result) {
         String recognised = result.getText();
         if (recognised == null || recognised.trim().isEmpty()) {
-            status.setText("No text found. Try a screenshot where the question is clear.");
-            extractedText.setText("No text was detected.");
+            status.setText("Image loaded. No text found, but the diagram is still available above.");
+            extractedText.setText("No text was detected in this screenshot.");
         } else {
-            status.setText("Screenshot read successfully.");
+            status.setText("Screenshot image and text loaded successfully.");
             extractedText.setText(recognised);
         }
     }
@@ -192,6 +223,9 @@ public class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
         if (recognizer != null) recognizer.close();
+        if (selectedScreenshot != null && !selectedScreenshot.isRecycled()) {
+            selectedScreenshot.recycle();
+        }
         super.onDestroy();
     }
 }
