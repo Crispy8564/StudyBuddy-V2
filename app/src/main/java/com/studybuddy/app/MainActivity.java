@@ -1,6 +1,7 @@
 package com.studybuddy.app;
 
 import android.app.Activity;
+import android.media.projection.MediaProjectionManager;
 import android.content.Intent;
 import android.content.ClipData;
 import android.graphics.Bitmap;
@@ -40,6 +41,7 @@ import java.util.concurrent.Executors;
 public class MainActivity extends Activity {
     private static final int OVERLAY_PERMISSION_REQUEST = 4101;
     private static final int SCREENSHOT_PICK_REQUEST = 4102;
+    private static final int SCREEN_CAPTURE_REQUEST = 4103;
 
     private LinearLayout root;
     private TextView status;
@@ -63,7 +65,7 @@ public class MainActivity extends Activity {
         autoAskAfterScreenshot = getIntent().getBooleanExtra("assistant_one_tap", false);
         launchedFromAssistant = autoAskAfterScreenshot;
         buildScreen();
-        if (autoAskAfterScreenshot) status.post(this::chooseScreenshot);
+        if (autoAskAfterScreenshot) status.post(this::beginScreenCapture);
     }
 
     private void buildScreen() {
@@ -163,6 +165,7 @@ public class MainActivity extends Activity {
         addTopSpace(stop, 10);
         stop.setOnClickListener(v -> {
             stopService(new Intent(this, FloatingHelperService.class));
+            stopService(new Intent(this, ScreenCaptureService.class));
             Toast.makeText(this, "Floating helper turned off", Toast.LENGTH_SHORT).show();
         });
 
@@ -177,6 +180,19 @@ public class MainActivity extends Activity {
 
     private int dp(int value) {
         return (int) (value * getResources().getDisplayMetrics().density + 0.5f);
+    }
+
+    private void beginScreenCapture() {
+        if (ScreenCaptureService.isRunning()) {
+            Intent capture = new Intent(this, ScreenCaptureService.class);
+            capture.setAction(ScreenCaptureService.ACTION_CAPTURE);
+            if (android.os.Build.VERSION.SDK_INT >= 26) startForegroundService(capture);
+            else startService(capture);
+            moveTaskToBack(true);
+            return;
+        }
+        MediaProjectionManager manager = (MediaProjectionManager) getSystemService(MEDIA_PROJECTION_SERVICE);
+        startActivityForResult(manager.createScreenCaptureIntent(), SCREEN_CAPTURE_REQUEST);
     }
 
     private void chooseScreenshot() {
@@ -196,6 +212,18 @@ public class MainActivity extends Activity {
         if (requestCode == OVERLAY_PERMISSION_REQUEST && Settings.canDrawOverlays(this)) {
             startService(new Intent(this, FloatingHelperService.class));
             Toast.makeText(this, "Floating helper enabled", Toast.LENGTH_SHORT).show();
+        } else if (requestCode == SCREEN_CAPTURE_REQUEST) {
+            if (resultCode == RESULT_OK && data != null) {
+                Intent captureService = new Intent(this, ScreenCaptureService.class);
+                captureService.putExtra("resultCode", resultCode);
+                captureService.putExtra("resultData", data);
+                captureService.putExtra("captureNow", true);
+                if (android.os.Build.VERSION.SDK_INT >= 26) startForegroundService(captureService);
+                else startService(captureService);
+                moveTaskToBack(true);
+            } else {
+                Toast.makeText(this, "Screen capture permission wasn't granted.", Toast.LENGTH_LONG).show();
+            }
         } else if (requestCode == SCREENSHOT_PICK_REQUEST && resultCode == RESULT_OK && data != null && data.getData() != null) {
             readScreenshot(data.getData());
         }
