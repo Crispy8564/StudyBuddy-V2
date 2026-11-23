@@ -51,6 +51,7 @@ public class MainActivity extends Activity {
     private Uri selectedScreenshotUri;
     private Button explainWithAi;
     private TextView aiAnswer;
+    private boolean autoAskAfterScreenshot = false;
     private final ExecutorService aiExecutor = Executors.newSingleThreadExecutor();
     private static final String AI_ENDPOINT = "https://studybuddy-ai.crispyawest2012.workers.dev";
 
@@ -58,7 +59,9 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
+        autoAskAfterScreenshot = getIntent().getBooleanExtra("assistant_one_tap", false);
         buildScreen();
+        if (autoAskAfterScreenshot) status.post(this::chooseScreenshot);
     }
 
     private void buildScreen() {
@@ -236,6 +239,7 @@ public class MainActivity extends Activity {
             status.setText("Screenshot image and text loaded successfully.");
             extractedText.setText(recognised);
             explainWithAi.setEnabled(selectedScreenshotUri != null);
+            if (autoAskAfterScreenshot) { autoAskAfterScreenshot = false; askStudyBuddyAi(); }
         }
     }
 
@@ -285,7 +289,7 @@ public class MainActivity extends Activity {
                 if (code < 200 || code >= 300) throw new IOException(response.optString("error", "AI request failed (" + code + ")."));
                 String answer = response.optString("answer", "");
                 if (answer.trim().isEmpty()) throw new IOException("The AI returned an empty answer.");
-                runOnUiThread(() -> { aiAnswer.setText(answer); status.setText("StudyBuddy AI has finished."); });
+                runOnUiThread(() -> { aiAnswer.setText(answer); status.setText("StudyBuddy AI has finished."); Intent resultIntent = new Intent("com.studybuddy.app.SHOW_AI_ANSWER"); resultIntent.setPackage(getPackageName()); resultIntent.putExtra("answer", answer); sendBroadcast(resultIntent); });
             } catch (Exception error) {
                 String message = error.getMessage() == null ? "Please try again." : error.getMessage();
                 runOnUiThread(() -> { aiAnswer.setText("I couldn't get an explanation: " + message); status.setText("AI request unsuccessful."); });
