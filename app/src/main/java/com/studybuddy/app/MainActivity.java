@@ -52,6 +52,7 @@ public class MainActivity extends Activity {
     private Button explainWithAi;
     private TextView aiAnswer;
     private boolean autoAskAfterScreenshot = false;
+    private boolean launchedFromAssistant = false;
     private final ExecutorService aiExecutor = Executors.newSingleThreadExecutor();
     private static final String AI_ENDPOINT = "https://studybuddy-ai.crispyawest2012.workers.dev";
 
@@ -60,6 +61,7 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
         recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
         autoAskAfterScreenshot = getIntent().getBooleanExtra("assistant_one_tap", false);
+        launchedFromAssistant = autoAskAfterScreenshot;
         buildScreen();
         if (autoAskAfterScreenshot) status.post(this::chooseScreenshot);
     }
@@ -234,13 +236,12 @@ public class MainActivity extends Activity {
         if (recognised == null || recognised.trim().isEmpty()) {
             status.setText("Image loaded. No text found, but the diagram is still available above.");
             extractedText.setText("No text was detected in this screenshot.");
-            explainWithAi.setEnabled(selectedScreenshotUri != null);
         } else {
             status.setText("Screenshot image and text loaded successfully.");
             extractedText.setText(recognised);
-            explainWithAi.setEnabled(selectedScreenshotUri != null);
-            if (autoAskAfterScreenshot) { autoAskAfterScreenshot = false; askStudyBuddyAi(); }
         }
+        explainWithAi.setEnabled(selectedScreenshotUri != null);
+        if (autoAskAfterScreenshot) { autoAskAfterScreenshot = false; askStudyBuddyAi(); }
     }
 
     private void askStudyBuddyAi() {
@@ -298,6 +299,10 @@ public class MainActivity extends Activity {
                 runOnUiThread(() -> { explainWithAi.setEnabled(true); explainWithAi.setText("Ask StudyBuddy AI"); });
             }
         });
+        if (launchedFromAssistant) {
+            launchedFromAssistant = false;
+            moveTaskToBack(true);
+        }
     }
 
     private void shareQuestionWithAi() {
