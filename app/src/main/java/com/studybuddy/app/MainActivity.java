@@ -27,6 +27,15 @@ import com.google.mlkit.vision.text.latin.TextRecognizerOptions;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import android.util.Base64;
+import org.json.JSONObject;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class MainActivity extends Activity {
     private static final int OVERLAY_PERMISSION_REQUEST = 4101;
@@ -41,6 +50,9 @@ public class MainActivity extends Activity {
     private Bitmap selectedScreenshot;
     private Uri selectedScreenshotUri;
     private Button explainWithAi;
+    private TextView aiAnswer;
+    private final ExecutorService aiExecutor = Executors.newSingleThreadExecutor();
+    private static final String AI_ENDPOINT = "https://studybuddy-ai.crispyawest2012.workers.dev";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -87,10 +99,18 @@ public class MainActivity extends Activity {
         chooseScreenshot.setOnClickListener(v -> chooseScreenshot());
 
         explainWithAi = new Button(this);
-        explainWithAi.setText("Ask an AI app to explain this question");
+        explainWithAi.setText("Ask StudyBuddy AI");
         explainWithAi.setEnabled(false);
         addTopSpace(explainWithAi, 12);
-        explainWithAi.setOnClickListener(v -> shareQuestionWithAi());
+        explainWithAi.setOnClickListener(v -> askStudyBuddyAi());
+
+        aiAnswer = new TextView(this);
+        aiAnswer.setText("Your AI explanation will appear here.");
+        aiAnswer.setTextColor(0xFFE8E2F0);
+        aiAnswer.setTextSize(16);
+        aiAnswer.setPadding(18, 18, 18, 18);
+        aiAnswer.setBackgroundColor(0xFF211B2B);
+        addTopSpace(aiAnswer, 18);
 
         status = new TextView(this);
         status.setText("Ready when you are.");
@@ -217,6 +237,63 @@ public class MainActivity extends Activity {
             extractedText.setText(recognised);
             explainWithAi.setEnabled(selectedScreenshotUri != null);
         }
+    }
+
+    private void askStudyBuddyAi() {
+        if (selectedScreenshot == null) {
+            Toast.makeText(this, "Choose a question screenshot first.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        explainWithAi.setEnabled(false);
+        explainWithAi.setText("Thinking…");
+        aiAnswer.setText("StudyBuddy is analysing your question and diagram…");
+        final Bitmap imageCopy = selectedScreenshot.copy(Bitmap.Config.ARGB_8888, false);
+        final String ocr = extractedText.getText().toString();
+
+        aiExecutor.execute(() -> {
+            HttpURLConnection connection = null;
+            try {
+                ByteArrayOutputStream imageBytes = new ByteArrayOutputStream();
+                imageCopy.compress(Bitmap.CompressFormat.JPEG, 82, imageBytes);
+                imageCopy.recycle();
+                String encodedImage = Base64.encodeToString(imageBytes.toByteArray(), Base64.NO_WRAP);
+                JSONObject payload = new JSONObject();
+                payload.put("imageBase64", encodedImage);
+                payload.put("mimeType", "image/jpeg");
+                payload.put("ocrText", ocr);
+
+                connection = (HttpURLConnection) new URL(AI_ENDPOINT).openConnection();
+                connection.setRequestMethod("POST");
+                connection.setConnectTimeout(20000);
+                connection.setReadTimeout(60000);
+                connection.setDoOutput(true);
+                connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+                byte[] body = payload.toString().getBytes(StandardCharsets.UTF_8);
+                connection.setFixedLengthStreamingMode(body.length);
+                try (OutputStream output = connection.getOutputStream()) { output.write(body); }
+
+                int code = connection.getResponseCode();
+                InputStream stream = code >= 200 && code < 300 ? connection.getInputStream() : connection.getErrorStream();
+                ByteArrayOutputStream responseBytes = new ByteArrayOutputStream();
+                if (stream != null) {
+                    try (InputStream input = stream) {
+                        byte[] buffer = new byte[4096]; int count;
+                        while ((count = input.read(buffer)) != -1) responseBytes.write(buffer, 0, count);
+                    }
+                }
+                JSONObject response = new JSONObject(responseBytes.toString("UTF-8"));
+                if (code < 200 || code >= 300) throw new IOException(response.optString("error", "AI request failed (" + code + ")."));
+                String answer = response.optString("answer", "");
+                if (answer.trim().isEmpty()) throw new IOException("The AI returned an empty answer.");
+                runOnUiThread(() -> { aiAnswer.setText(answer); status.setText("StudyBuddy AI has finished."); });
+            } catch (Exception error) {
+                String message = error.getMessage() == null ? "Please try again." : error.getMessage();
+                runOnUiThread(() -> { aiAnswer.setText("I couldn't get an explanation: " + message); status.setText("AI request unsuccessful."); });
+            } finally {
+                if (connection != null) connection.disconnect();
+                runOnUiThread(() -> { explainWithAi.setEnabled(true); explainWithAi.setText("Ask StudyBuddy AI"); });
+            }
+        });
     }
 
     private void shareQuestionWithAi() {
