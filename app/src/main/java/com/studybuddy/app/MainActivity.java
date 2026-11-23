@@ -2,6 +2,7 @@ package com.studybuddy.app;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.content.ClipData;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Color;
@@ -38,6 +39,8 @@ public class MainActivity extends Activity {
     private Button chooseScreenshot;
     private TextRecognizer recognizer;
     private Bitmap selectedScreenshot;
+    private Uri selectedScreenshotUri;
+    private Button explainWithAi;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -82,6 +85,12 @@ public class MainActivity extends Activity {
         chooseScreenshot.setText("Choose Educake screenshot");
         addTopSpace(chooseScreenshot, 18);
         chooseScreenshot.setOnClickListener(v -> chooseScreenshot());
+
+        explainWithAi = new Button(this);
+        explainWithAi.setText("Ask an AI app to explain this question");
+        explainWithAi.setEnabled(false);
+        addTopSpace(explainWithAi, 12);
+        explainWithAi.setOnClickListener(v -> shareQuestionWithAi());
 
         status = new TextView(this);
         status.setText("Ready when you are.");
@@ -178,6 +187,7 @@ public class MainActivity extends Activity {
                 selectedScreenshot.recycle();
             }
             selectedScreenshot = bitmap;
+            selectedScreenshotUri = imageUri;
             screenshotPreview.setImageBitmap(selectedScreenshot);
             screenshotPreview.setVisibility(View.VISIBLE);
 
@@ -201,9 +211,33 @@ public class MainActivity extends Activity {
         if (recognised == null || recognised.trim().isEmpty()) {
             status.setText("Image loaded. No text found, but the diagram is still available above.");
             extractedText.setText("No text was detected in this screenshot.");
+            explainWithAi.setEnabled(selectedScreenshotUri != null);
         } else {
             status.setText("Screenshot image and text loaded successfully.");
             extractedText.setText(recognised);
+            explainWithAi.setEnabled(selectedScreenshotUri != null);
+        }
+    }
+
+    private void shareQuestionWithAi() {
+        if (selectedScreenshotUri == null) {
+            Toast.makeText(this, "Choose a question screenshot first.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        String questionText = extractedText.getText().toString();
+        String prompt = "Please help me understand this school question. Use the attached screenshot and the recognised text below. Explain the reasoning step by step, refer to the diagram if relevant, and help me learn rather than just giving an answer. If anything in the image is unclear, say so.\n\nRecognised text:\n" + questionText;
+
+        Intent share = new Intent(Intent.ACTION_SEND);
+        share.setType("image/*");
+        share.putExtra(Intent.EXTRA_STREAM, selectedScreenshotUri);
+        share.putExtra(Intent.EXTRA_TEXT, prompt);
+        share.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        share.setClipData(ClipData.newUri(getContentResolver(), "StudyBuddy question screenshot", selectedScreenshotUri));
+        try {
+            startActivity(Intent.createChooser(share, "Choose an AI app to explain this question"));
+        } catch (Exception e) {
+            Toast.makeText(this, "No compatible app was found to share the question.", Toast.LENGTH_LONG).show();
         }
     }
 
