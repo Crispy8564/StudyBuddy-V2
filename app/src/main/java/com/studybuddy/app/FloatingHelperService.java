@@ -55,7 +55,19 @@ public class FloatingHelperService extends Service {
         params.x = dp(16);
         params.y = dp(220);
 
-        button.setOnClickListener(v -> { Intent open = new Intent(this, MainActivity.class); open.putExtra("assistant_one_tap", true); open.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP); startActivity(open); });
+        button.setOnClickListener(v -> {
+            if (ScreenCaptureService.isRunning()) {
+                Intent capture = new Intent(this, ScreenCaptureService.class);
+                capture.setAction(ScreenCaptureService.ACTION_CAPTURE);
+                if (android.os.Build.VERSION.SDK_INT >= 26) startForegroundService(capture);
+                else startService(capture);
+            } else {
+                Intent open = new Intent(this, MainActivity.class);
+                open.putExtra("assistant_one_tap", true);
+                open.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                startActivity(open);
+            }
+        });
         answerReceiver = new BroadcastReceiver() { @Override public void onReceive(Context context, Intent intent) { String answer = intent.getStringExtra("answer"); if (answer != null) showAnswer(answer); } };
         IntentFilter answerFilter = new IntentFilter("com.studybuddy.app.SHOW_AI_ANSWER");
         if (android.os.Build.VERSION.SDK_INT >= 33) registerReceiver(answerReceiver, answerFilter, Context.RECEIVER_NOT_EXPORTED); else registerReceiver(answerReceiver, answerFilter);
